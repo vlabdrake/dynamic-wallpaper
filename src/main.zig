@@ -1,7 +1,7 @@
 const std = @import("std");
 const tzif = @import("tzif");
 
-const Config = struct { wallpapers: [][]u8 };
+const Config = struct { symlink: []u8, wallpapers: [][]u8 };
 
 fn load_config(allocator: std.mem.Allocator, path: []const u8) !Config {
     const data = try std.fs.cwd().readFileAlloc(allocator, path, 4096);
@@ -42,9 +42,10 @@ pub fn main() !void {
         const expected_wallpaper = @divTrunc(seconds_from_midnight, wallpaper_update_interval);
         if (expected_wallpaper != current_wallpaper) {
             current_wallpaper = expected_wallpaper;
-            try set_background(allocator, config.wallpapers[current_wallpaper]);
+            try std.fs.deleteFileAbsolute(config.symlink);
+            try std.fs.symLinkAbsolute(config.wallpapers[current_wallpaper], config.symlink, .{});
+            try set_background(allocator, config.symlink);
         }
-        const next_change_in = wallpaper_update_interval - @rem(seconds_from_midnight, wallpaper_update_interval);
-        std.time.sleep(next_change_in * std.time.ns_per_s);
+        std.time.sleep(60 * std.time.ns_per_s);
     }
 }

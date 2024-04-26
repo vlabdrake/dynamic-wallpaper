@@ -1,8 +1,10 @@
 # dynamic wallpaper
 
-swww-based dynamic wallpaper switcher
+## features
 
-switches wallpapers from configured list during the day
+  * swww-based dynamic wallpaper switcher
+  * switches wallpapers from configured list during the day
+  * create symlink to current wallpaper (useful with screenlock utilities, e.g. hyprlock)
 
 ## usage
 
@@ -14,6 +16,7 @@ $ ./dynamic_wallpaper config.json
 
 ```json
 {
+  "symlink": "path/to/symlink",
   "wallpapers": [
     "path/to/wallpaper-1.jpg",
     "path/to/wallpaper-2.jpg",
