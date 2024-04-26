@@ -1,0 +1,10 @@
+.{
+    .name = "dynamic_wallpaper",
+    .version = "0.1.0",
+    .dependencies = .{
+        .tzif = .{
+            .url = "https://github.com/leroycep/zig-tzif/archive/fdac55aa9b4a59b5b0dcba20866b6943fc00765d.tar.gz",
+            .hash = "1220459c1522d67e7541b3500518c9db7d380aaa962d433e6704d87a21b643502e69",
+        },
+    },
+}
