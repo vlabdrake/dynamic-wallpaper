@@ -4,7 +4,8 @@
 
   * swww-based dynamic wallpaper switcher
   * switches wallpapers from configured list during the day
-  * create symlink to current wallpaper (useful with screenlock utilities, e.g. hyprlock)
+  * creates symlink to current wallpaper (useful with screenlock utilities, e.g. hyprlock)
+  * uses systemd timer
 
 ## usage
 
