@@ -1,5 +1,7 @@
 const std = @import("std");
-const tzif = @import("tzif");
+const c = @cImport({
+    @cInclude("time.h");
+});
 
 const Config = struct { symlink: []u8, wallpapers: [][]u8 };
 
@@ -31,21 +33,24 @@ pub fn main() !void {
     var config_path: []const u8 = args[1];
 
     const config = try load_config(allocator, config_path);
-    const wallpaper_update_interval = @divTrunc(86400, config.wallpapers.len);
+    const wallpaper_update_interval = 86400 / config.wallpapers.len;
     var current_wallpaper: usize = undefined;
-    const localtime = try tzif.parseFile(allocator, "/etc/localtime");
-    defer localtime.deinit();
 
     while (true) {
-        const now = localtime.localTimeFromUTC(std.time.timestamp()).?;
-        const seconds_from_midnight: usize = @intCast(@mod(now.timestamp, 86400));
-        const expected_wallpaper = @divTrunc(seconds_from_midnight, wallpaper_update_interval);
+        const now = c.time(null);
+        var tm = c.localtime(&now);
+        tm.*.tm_hour = 0;
+        tm.*.tm_min = 0;
+        tm.*.tm_sec = 0;
+        const midnight = c.mktime(tm);
+        const seconds_since_midnight: usize = @intFromFloat(c.difftime(now, midnight));
+        const expected_wallpaper = seconds_since_midnight / wallpaper_update_interval;
         if (expected_wallpaper != current_wallpaper) {
             current_wallpaper = expected_wallpaper;
             try std.fs.deleteFileAbsolute(config.symlink);
             try std.fs.symLinkAbsolute(config.wallpapers[current_wallpaper], config.symlink, .{});
             try set_background(allocator, config.symlink);
         }
-        std.time.sleep(60 * std.time.ns_per_s);
+        std.time.sleep(1 * std.time.ns_per_min);
     }
 }
