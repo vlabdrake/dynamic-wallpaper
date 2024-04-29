@@ -1,7 +1,5 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("time.h");
-});
+const dt = @import("datetime.zig");
 
 const Config = struct { symlink: []u8, wallpapers: [][]u8 };
 
@@ -40,13 +38,10 @@ pub fn main() !void {
     const wallpaper_update_interval = 86400 / config.wallpapers.len;
     var current_wallpaper: usize = undefined;
 
-    const now = c.time(null);
-    var tm = c.localtime(&now);
-    tm.*.tm_hour = 0;
-    tm.*.tm_min = 0;
-    tm.*.tm_sec = 0;
-    const midnight = c.mktime(tm);
-    const seconds_since_midnight: usize = @intFromFloat(c.difftime(now, midnight));
+    const now = dt.DateTime.now();
+    const midnight = now.replace(.{ .hour = 0, .minute = 0, .second = 0 });
+
+    const seconds_since_midnight: usize = @intCast(now.timestamp() - midnight.timestamp());
     const expected_wallpaper = seconds_since_midnight / wallpaper_update_interval;
     if (expected_wallpaper != current_wallpaper) {
         current_wallpaper = expected_wallpaper;
@@ -54,9 +49,8 @@ pub fn main() !void {
         try std.fs.symLinkAbsolute(config.wallpapers[current_wallpaper], config.symlink, .{});
         try set_background(allocator, config.symlink);
     }
-    const time_to_next_change = wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval;
-    var next_change_ts: usize = @intCast(now);
-    next_change_ts += time_to_next_change;
+    const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
+    var next_change_ts = now.timestamp() + time_to_next_change;
     var set_timer_command = std.ArrayList([]const u8).init(allocator);
     try set_timer_command.appendSlice(&[_][]const u8{
         "systemd-run",
