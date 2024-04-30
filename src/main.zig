@@ -1,18 +1,21 @@
 const std = @import("std");
 const dt = @import("datetime.zig");
 
-const Config = struct { symlink: []u8, wallpapers: [][]u8 };
+const Config = struct {
+    symlink: []u8,
+    wallpapers: [][]u8,
 
-fn load_config(allocator: std.mem.Allocator, path: []const u8) !Config {
-    const data = try std.fs.cwd().readFileAlloc(allocator, path, 4096);
-    defer allocator.free(data);
+    fn from_file(allocator: std.mem.Allocator, path: []const u8) !Config {
+        const data = try std.fs.cwd().readFileAlloc(allocator, path, 4096);
+        defer allocator.free(data);
 
-    const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
-    // defer parsed.deinit();
+        const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
+        // defer parsed.deinit();
 
-    const config = parsed.value;
-    return config;
-}
+        const config = parsed.value;
+        return config;
+    }
+};
 
 fn run_command(allocator: std.mem.Allocator, argv: []const []const u8) !void {
     var proc = try std.ChildProcess.exec(.{ .allocator = allocator, .argv = argv });
@@ -34,7 +37,7 @@ pub fn main() !void {
 
     var config_path: []const u8 = args[1];
 
-    const config = try load_config(allocator, config_path);
+    const config = try Config.from_file(allocator, config_path);
     const wallpaper_update_interval = 86400 / config.wallpapers.len;
     var current_wallpaper: usize = undefined;
 
