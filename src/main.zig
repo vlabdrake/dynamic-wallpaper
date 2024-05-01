@@ -5,7 +5,7 @@ const Config = struct {
     symlink: []u8,
     wallpapers: [][]u8,
 
-    fn from_file(allocator: std.mem.Allocator, path: []const u8) !Config {
+    fn fromFile(allocator: std.mem.Allocator, path: []const u8) !Config {
         const data = try std.fs.cwd().readFileAlloc(allocator, path, 4096);
         defer allocator.free(data);
 
@@ -17,15 +17,15 @@ const Config = struct {
     }
 };
 
-fn run_command(allocator: std.mem.Allocator, argv: []const []const u8) !void {
+fn runCommand(allocator: std.mem.Allocator, argv: []const []const u8) !void {
     var proc = try std.ChildProcess.exec(.{ .allocator = allocator, .argv = argv });
     defer allocator.free(proc.stdout);
     defer allocator.free(proc.stderr);
 }
 
-fn set_background(allocator: std.mem.Allocator, path: []const u8) !void {
+fn setBackground(allocator: std.mem.Allocator, path: []const u8) !void {
     const argv = [_][]const u8{ "swww", "img", path };
-    try run_command(allocator, &argv);
+    try runCommand(allocator, &argv);
 }
 
 pub fn main() !void {
@@ -37,7 +37,7 @@ pub fn main() !void {
 
     var config_path: []const u8 = args[1];
 
-    const config = try Config.from_file(allocator, config_path);
+    const config = try Config.fromFile(allocator, config_path);
     const wallpaper_update_interval = 86400 / config.wallpapers.len;
     var current_wallpaper: usize = undefined;
 
@@ -50,11 +50,12 @@ pub fn main() !void {
         current_wallpaper = expected_wallpaper;
         try std.fs.deleteFileAbsolute(config.symlink);
         try std.fs.symLinkAbsolute(config.wallpapers[current_wallpaper], config.symlink, .{});
-        try set_background(allocator, config.symlink);
+        try setBackground(allocator, config.symlink);
     }
     const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
     var next_change_ts = now.timestamp() + time_to_next_change;
     var set_timer_command = std.ArrayList([]const u8).init(allocator);
+    defer set_timer_command.deinit();
     try set_timer_command.appendSlice(&[_][]const u8{
         "systemd-run",
         "--user",
@@ -65,5 +66,5 @@ pub fn main() !void {
     for (args) |arg| {
         try set_timer_command.append(arg);
     }
-    try run_command(allocator, set_timer_command.items);
+    try runCommand(allocator, set_timer_command.items);
 }
