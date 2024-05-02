@@ -5,10 +5,13 @@ const c = @cImport({
 
 pub const DateTime = struct {
     tm: c.struct_tm,
+    ts: i64,
 
     pub fn now() DateTime {
         const ts = c.time(null);
-        return DateTime{ .tm = c.localtime(&ts).* };
+        var dt = DateTime{ .tm = undefined, .ts = ts };
+        _ = c.localtime_r(&ts, &dt.tm);
+        return dt;
     }
 
     pub fn replace(self: DateTime, replacement: anytype) DateTime {
@@ -24,11 +27,13 @@ pub const DateTime = struct {
                 result.tm.tm_sec = @field(replacement, field.name);
             }
         }
+
+        // normalize tm and update timestamp
+        result.ts = c.mktime(&result.tm);
         return result;
     }
 
     pub fn timestamp(self: *const DateTime) i64 {
-        var _tm = self.tm;
-        return c.mktime(&_tm);
+        return self.ts;
     }
 };
