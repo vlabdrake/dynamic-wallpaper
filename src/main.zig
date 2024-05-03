@@ -10,10 +10,28 @@ const Config = struct {
         defer allocator.free(data);
 
         const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
-        // defer parsed.deinit();
+        defer parsed.deinit();
 
-        const config = parsed.value;
+        var config = Config{ .symlink = undefined, .wallpapers = undefined };
+        config.symlink = try allocator.alloc(u8, parsed.value.symlink.len);
+        @memcpy(config.symlink, parsed.value.symlink);
+
+        config.wallpapers = try allocator.alloc([]u8, parsed.value.wallpapers.len);
+        for (0..config.wallpapers.len) |i| {
+            config.wallpapers[i] = try allocator.alloc(u8, parsed.value.wallpapers[i].len);
+            @memcpy(config.wallpapers[i], parsed.value.wallpapers[i]);
+        }
         return config;
+    }
+
+    fn deinit(self: *const Config, allocator: std.mem.Allocator) void {
+        allocator.free(self.symlink);
+
+        for (0..self.wallpapers.len) |i| {
+            allocator.free(self.wallpapers[i]);
+        }
+
+        allocator.free(self.wallpapers);
     }
 };
 
@@ -38,6 +56,8 @@ pub fn main() !void {
     var config_path: []const u8 = args[1];
 
     const config = try Config.fromFile(allocator, config_path);
+    defer config.deinit(allocator);
+
     const wallpaper_update_interval = 86400 / config.wallpapers.len;
     var current_wallpaper: usize = undefined;
 
@@ -54,13 +74,17 @@ pub fn main() !void {
     }
     const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
     var next_change_ts = now.timestamp() + time_to_next_change;
+
+    var buf: [16]u8 = undefined;
+    const ts = try std.fmt.bufPrint(&buf, "@{}", .{next_change_ts});
+
     var set_timer_command = std.ArrayList([]const u8).init(allocator);
     defer set_timer_command.deinit();
     try set_timer_command.appendSlice(&[_][]const u8{
         "systemd-run",
         "--user",
         "--on-calendar",
-        try std.fmt.allocPrint(allocator, "@{}", .{next_change_ts}),
+        ts,
         "--timer-property=AccuracySec=1us",
     });
     for (args) |arg| {
