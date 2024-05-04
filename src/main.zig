@@ -36,7 +36,7 @@ const Config = struct {
 };
 
 fn runCommand(allocator: std.mem.Allocator, argv: []const []const u8) !void {
-    var proc = try std.ChildProcess.exec(.{ .allocator = allocator, .argv = argv });
+    const proc = try std.ChildProcess.run(.{ .allocator = allocator, .argv = argv });
     defer allocator.free(proc.stdout);
     defer allocator.free(proc.stderr);
 }
@@ -50,10 +50,10 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var args = try std.process.argsAlloc(allocator);
+    const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    var config_path: []const u8 = args[1];
+    const config_path: []const u8 = args[1];
 
     const config = try Config.fromFile(allocator, config_path);
     defer config.deinit(allocator);
@@ -73,7 +73,7 @@ pub fn main() !void {
         try setBackground(allocator, config.symlink);
     }
     const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
-    var next_change_ts = now.timestamp() + time_to_next_change;
+    const next_change_ts = now.timestamp() + time_to_next_change;
 
     var buf: [16]u8 = undefined;
     const ts = try std.fmt.bufPrint(&buf, "@{}", .{next_change_ts});
