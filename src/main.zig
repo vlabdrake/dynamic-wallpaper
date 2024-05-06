@@ -46,6 +46,11 @@ fn setBackground(allocator: std.mem.Allocator, path: []const u8) !void {
     try runCommand(allocator, &argv);
 }
 
+fn setGtkTheme(allocator: std.mem.Allocator, theme: []const u8) !void {
+    const argv = [_][]const u8{ "gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme };
+    try runCommand(allocator, &argv);
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
