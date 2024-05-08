@@ -6,6 +6,7 @@ const ColorScheme = enum { Light, Dark };
 const Config = struct {
     symlink: []u8,
     wallpapers: [][]u8,
+    gtk: GTK,
 
     fn fromFile(allocator: std.mem.Allocator, path: []const u8) !Config {
         const data = try std.fs.cwd().readFileAlloc(allocator, path, 4096);
@@ -14,7 +15,7 @@ const Config = struct {
         const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
         defer parsed.deinit();
 
-        var config = Config{ .symlink = undefined, .wallpapers = undefined };
+        var config: Config = undefined;
         config.symlink = try allocator.alloc(u8, parsed.value.symlink.len);
         @memcpy(config.symlink, parsed.value.symlink);
 
@@ -23,6 +24,12 @@ const Config = struct {
             config.wallpapers[i] = try allocator.alloc(u8, parsed.value.wallpapers[i].len);
             @memcpy(config.wallpapers[i], parsed.value.wallpapers[i]);
         }
+
+        config.gtk.light_theme = try allocator.alloc(u8, parsed.value.gtk.light_theme.len);
+        @memcpy(config.gtk.light_theme, parsed.value.gtk.light_theme);
+        config.gtk.dark_theme = try allocator.alloc(u8, parsed.value.gtk.dark_theme.len);
+        @memcpy(config.gtk.dark_theme, parsed.value.gtk.dark_theme);
+
         return config;
     }
 
