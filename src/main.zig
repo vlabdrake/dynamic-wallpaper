@@ -59,12 +59,12 @@ const GTK = struct {
     light_theme: []u8,
     dark_theme: []u8,
 
-    fn setTheme(self: *GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    fn setTheme(self: *const GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
         try self.setGtkTheme(allocator, scheme);
         try self.setColorScheme(allocator, scheme);
     }
 
-    fn setGtkTheme(self: *GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    fn setGtkTheme(self: *const GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
         const theme = switch (scheme) {
             ColorScheme.Light => self.light_theme,
             ColorScheme.Dark => self.dark_theme,
@@ -73,13 +73,13 @@ const GTK = struct {
         try runCommand(allocator, &argv);
     }
 
-    fn setColorScheme(_: *GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    fn setColorScheme(_: *const GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
         const scheme_str = switch (scheme) {
             ColorScheme.Light => "prefer-light",
             ColorScheme.Dark => "prefer-dark",
         };
         const argv = [_][]const u8{ "gsettings", "set", "org.gnome.desktop.interface", "color-scheme", scheme_str };
-        try runCommand(allocator, argv);
+        try runCommand(allocator, &argv);
     }
 };
 
@@ -128,4 +128,13 @@ pub fn main() !void {
         try set_timer_command.append(arg);
     }
     try runCommand(allocator, set_timer_command.items);
+
+    // TODO calculations of sunrise and sunset
+    const sunrise = 5 * 3600;
+    const sunset = 19 * 3600;
+    const color_scheme = switch (seconds_since_midnight) {
+        sunrise...sunset => ColorScheme.Light,
+        else => ColorScheme.Dark,
+    };
+    try config.gtk.setTheme(allocator, color_scheme);
 }
