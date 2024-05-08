@@ -1,6 +1,8 @@
 const std = @import("std");
 const dt = @import("datetime.zig");
 
+const ColorScheme = enum { Light, Dark };
+
 const Config = struct {
     symlink: []u8,
     wallpapers: [][]u8,
@@ -46,10 +48,33 @@ fn setBackground(allocator: std.mem.Allocator, path: []const u8) !void {
     try runCommand(allocator, &argv);
 }
 
-fn setGtkTheme(allocator: std.mem.Allocator, theme: []const u8) !void {
-    const argv = [_][]const u8{ "gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme };
-    try runCommand(allocator, &argv);
-}
+const GTK = struct {
+    light_theme: []u8,
+    dark_theme: []u8,
+
+    fn setTheme(self: *GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+        try self.setGtkTheme(allocator, scheme);
+        try self.setColorScheme(allocator, scheme);
+    }
+
+    fn setGtkTheme(self: *GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+        const theme = switch (scheme) {
+            ColorScheme.Light => self.light_theme,
+            ColorScheme.Dark => self.dark_theme,
+        };
+        const argv = [_][]const u8{ "gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme };
+        try runCommand(allocator, &argv);
+    }
+
+    fn setColorScheme(_: *GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+        const scheme_str = switch (scheme) {
+            ColorScheme.Light => "prefer-light",
+            ColorScheme.Dark => "prefer-dark",
+        };
+        const argv = [_][]const u8{ "gsettings", "set", "org.gnome.desktop.interface", "color-scheme", scheme_str };
+        try runCommand(allocator, argv);
+    }
+};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
