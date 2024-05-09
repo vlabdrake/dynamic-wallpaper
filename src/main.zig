@@ -7,53 +7,7 @@ const Config = struct {
     symlink: []u8,
     wallpapers: [][]u8,
     gtk: GTK,
-
-    fn fromFile(allocator: std.mem.Allocator, path: []const u8) !Config {
-        const data = try std.fs.cwd().readFileAlloc(allocator, path, 4096);
-        defer allocator.free(data);
-
-        const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
-        defer parsed.deinit();
-
-        var config: Config = undefined;
-        config.symlink = try allocator.alloc(u8, parsed.value.symlink.len);
-        @memcpy(config.symlink, parsed.value.symlink);
-
-        config.wallpapers = try allocator.alloc([]u8, parsed.value.wallpapers.len);
-        for (0..config.wallpapers.len) |i| {
-            config.wallpapers[i] = try allocator.alloc(u8, parsed.value.wallpapers[i].len);
-            @memcpy(config.wallpapers[i], parsed.value.wallpapers[i]);
-        }
-
-        config.gtk.light_theme = try allocator.alloc(u8, parsed.value.gtk.light_theme.len);
-        @memcpy(config.gtk.light_theme, parsed.value.gtk.light_theme);
-        config.gtk.dark_theme = try allocator.alloc(u8, parsed.value.gtk.dark_theme.len);
-        @memcpy(config.gtk.dark_theme, parsed.value.gtk.dark_theme);
-
-        return config;
-    }
-
-    fn deinit(self: *const Config, allocator: std.mem.Allocator) void {
-        allocator.free(self.symlink);
-
-        for (0..self.wallpapers.len) |i| {
-            allocator.free(self.wallpapers[i]);
-        }
-
-        allocator.free(self.wallpapers);
-    }
 };
-
-fn runCommand(allocator: std.mem.Allocator, argv: []const []const u8) !void {
-    const proc = try std.ChildProcess.run(.{ .allocator = allocator, .argv = argv });
-    defer allocator.free(proc.stdout);
-    defer allocator.free(proc.stderr);
-}
-
-fn setBackground(allocator: std.mem.Allocator, path: []const u8) !void {
-    const argv = [_][]const u8{ "swww", "img", path };
-    try runCommand(allocator, &argv);
-}
 
 const GTK = struct {
     light_theme: []u8,
@@ -83,6 +37,27 @@ const GTK = struct {
     }
 };
 
+fn parseConfig(allocator: std.mem.Allocator, path: []const u8) !std.json.Parsed(Config) {
+    const file = try std.fs.cwd().openFile(path, .{});
+    const file_size = (try file.stat()).size;
+    const data = try std.fs.cwd().readFileAlloc(allocator, path, file_size);
+    defer allocator.free(data);
+
+    const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
+    return parsed;
+}
+
+fn runCommand(allocator: std.mem.Allocator, argv: []const []const u8) !void {
+    const proc = try std.ChildProcess.run(.{ .allocator = allocator, .argv = argv });
+    defer allocator.free(proc.stdout);
+    defer allocator.free(proc.stderr);
+}
+
+fn setBackground(allocator: std.mem.Allocator, path: []const u8) !void {
+    const argv = [_][]const u8{ "swww", "img", path };
+    try runCommand(allocator, &argv);
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -92,8 +67,10 @@ pub fn main() !void {
 
     const config_path: []const u8 = args[1];
 
-    const config = try Config.fromFile(allocator, config_path);
-    defer config.deinit(allocator);
+    const parsed = try parseConfig(allocator, config_path);
+    defer parsed.deinit();
+
+    const config = parsed.value;
 
     const wallpaper_update_interval = 86400 / config.wallpapers.len;
     var current_wallpaper: usize = undefined;
