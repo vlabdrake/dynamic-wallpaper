@@ -82,8 +82,8 @@ pub fn main() !void {
     const expected_wallpaper = seconds_since_midnight / wallpaper_update_interval;
     if (expected_wallpaper != current_wallpaper) {
         current_wallpaper = expected_wallpaper;
-        try std.fs.deleteFileAbsolute(config.symlink);
-        try std.fs.symLinkAbsolute(config.wallpapers[current_wallpaper], config.symlink, .{});
+        std.fs.cwd().deleteFile(config.symlink) catch {};
+        try std.fs.cwd().symLink(config.wallpapers[current_wallpaper], config.symlink, .{});
         try setBackground(allocator, config.symlink);
     }
     const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
