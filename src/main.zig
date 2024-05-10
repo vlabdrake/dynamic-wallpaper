@@ -1,5 +1,6 @@
 const std = @import("std");
 const dt = @import("datetime.zig");
+const c = @cImport(@cInclude("stdlib.h"));
 
 const ColorScheme = enum { Light, Dark };
 
@@ -44,6 +45,12 @@ fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try std.fs.cwd().readFileAlloc(allocator, path, file_size);
 }
 
+fn writeFile(path: []const u8, data: []const u8) !void {
+    const f = try std.fs.cwd().openFile(path, .{ .mode = .write_only });
+    try f.writeAll(data);
+    f.close();
+}
+
 fn parseConfig(allocator: std.mem.Allocator, path: []const u8) !std.json.Parsed(Config) {
     const data = try readFile(allocator, path);
     defer allocator.free(data);
@@ -61,6 +68,45 @@ fn runCommand(allocator: std.mem.Allocator, argv: []const []const u8) !void {
 fn setBackground(allocator: std.mem.Allocator, path: []const u8) !void {
     const argv = [_][]const u8{ "swww", "img", path };
     try runCommand(allocator, &argv);
+}
+
+fn replaceAlloc(allocator: std.mem.Allocator, str: []const u8, old: []const u8, new: []const u8) ![]const u8 {
+    const found = std.mem.indexOf(u8, str, old);
+    if (found) |start_index| {
+        var result = std.ArrayList(u8).init(allocator);
+        defer result.deinit();
+        try result.appendSlice(str[0..start_index]);
+        try result.appendSlice(new);
+        try result.appendSlice(str[start_index + old.len ..]);
+        return result.toOwnedSlice();
+    }
+    return str;
+}
+
+fn setZedThemeMode(allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    const home_dir = std.mem.span(c.getenv("HOME"));
+
+    const path = try std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".config/zed/settings.json" });
+    defer allocator.free(path);
+
+    const data = try readFile(allocator, path);
+    defer allocator.free(data);
+
+    const dark_mode = "\"mode\": \"dark\"";
+    const light_mode = "\"mode\": \"light\"";
+
+    if (scheme == ColorScheme.Light and std.mem.indexOf(u8, data, dark_mode) != null) {
+        const new_data = try replaceAlloc(allocator, data, dark_mode, light_mode);
+        defer allocator.free(new_data);
+        try writeFile(path, new_data);
+        return;
+    }
+    if (scheme == ColorScheme.Dark and std.mem.indexOf(u8, data, light_mode) != null) {
+        const new_data = try replaceAlloc(allocator, data, light_mode, dark_mode);
+        defer allocator.free(new_data);
+        try writeFile(path, new_data);
+        return;
+    }
 }
 
 pub fn main() !void {
@@ -119,4 +165,5 @@ pub fn main() !void {
         else => ColorScheme.Dark,
     };
     try config.gtk.setTheme(allocator, color_scheme);
+    try setZedThemeMode(allocator, color_scheme);
 }
