@@ -37,10 +37,15 @@ const GTK = struct {
     }
 };
 
-fn parseConfig(allocator: std.mem.Allocator, path: []const u8) !std.json.Parsed(Config) {
-    const file = try std.fs.cwd().openFile(path, .{});
+fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+    defer file.close();
     const file_size = (try file.stat()).size;
-    const data = try std.fs.cwd().readFileAlloc(allocator, path, file_size);
+    return try std.fs.cwd().readFileAlloc(allocator, path, file_size);
+}
+
+fn parseConfig(allocator: std.mem.Allocator, path: []const u8) !std.json.Parsed(Config) {
+    const data = try readFile(allocator, path);
     defer allocator.free(data);
 
     const parsed = try std.json.parseFromSlice(Config, allocator, data, .{ .allocate = .alloc_always });
