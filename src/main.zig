@@ -8,6 +8,7 @@ const Config = struct {
     symlink: []u8,
     wallpapers: [][]u8,
     gtk: GTK,
+    kitty: ?Kitty,
 };
 
 const GTK = struct {
@@ -109,6 +110,25 @@ fn setZedThemeMode(allocator: std.mem.Allocator, scheme: ColorScheme) !void {
     }
 }
 
+const Kitty = struct {
+    light_theme: []const u8,
+    dark_theme: []const u8,
+
+    fn setTheme(self: *const Kitty, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+        const home_dir = std.mem.span(c.getenv("HOME"));
+        const kitty_dir = try std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".config/kitty" });
+        const theme_config = "theme.conf";
+        const dir = try std.fs.cwd().openDir(kitty_dir, .{});
+        dir.deleteFile(theme_config) catch {};
+        const theme = switch (scheme) {
+            ColorScheme.Dark => self.dark_theme,
+            ColorScheme.Light => self.light_theme,
+        };
+        try dir.symLink(theme, theme_config, .{});
+        try runCommand(allocator, &[_][]const u8{ "killall", "-SIGUSR1", "kitty" });
+    }
+};
+
 fn setSystemdTimer(allocator: std.mem.Allocator, timestamp: i64, cmd: []const []const u8) !void {
     var buf: [16]u8 = undefined;
     const ts = try std.fmt.bufPrint(&buf, "@{}", .{timestamp});
@@ -168,4 +188,7 @@ pub fn main() !void {
     };
     try config.gtk.setTheme(allocator, color_scheme);
     try setZedThemeMode(allocator, color_scheme);
+    if (config.kitty) |kitty| {
+        try kitty.setTheme(allocator, color_scheme);
+    }
 }
