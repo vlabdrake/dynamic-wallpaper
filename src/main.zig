@@ -5,10 +5,24 @@ const c = @cImport(@cInclude("stdlib.h"));
 const ColorScheme = enum { Light, Dark };
 
 const Config = struct {
-    symlink: []u8,
-    wallpapers: [][]u8,
+    wallpaper: ?Wallpaper,
     gtk: ?Gtk,
     kitty: ?Kitty,
+};
+
+const Wallpaper = struct {
+    symlink: []u8,
+    wallpapers: [][]u8,
+
+    fn updateWallpaper(self: *const Wallpaper, allocator: std.mem.Allocator, seconds_since_midnight: u64) !i64 {
+        const wallpaper_update_interval = 86400 / self.wallpapers.len;
+        const current_wallpaper = seconds_since_midnight / wallpaper_update_interval;
+        std.fs.cwd().deleteFile(self.symlink) catch {};
+        try std.fs.cwd().symLink(self.wallpapers[current_wallpaper], self.symlink, .{});
+        try setBackground(allocator, self.symlink);
+        const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
+        return time_to_next_change;
+    }
 };
 
 const Gtk = struct {
@@ -160,24 +174,10 @@ pub fn main() !void {
 
     const config = parsed.value;
 
-    const wallpaper_update_interval = 86400 / config.wallpapers.len;
-    var current_wallpaper: usize = undefined;
-
     const now = dt.DateTime.now();
     const midnight = now.replace(.{ .hour = 0, .minute = 0, .second = 0 });
 
     const seconds_since_midnight: usize = @intCast(now.timestamp() - midnight.timestamp());
-    const expected_wallpaper = seconds_since_midnight / wallpaper_update_interval;
-    if (expected_wallpaper != current_wallpaper) {
-        current_wallpaper = expected_wallpaper;
-        std.fs.cwd().deleteFile(config.symlink) catch {};
-        try std.fs.cwd().symLink(config.wallpapers[current_wallpaper], config.symlink, .{});
-        try setBackground(allocator, config.symlink);
-    }
-    const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
-    const next_change_ts = now.timestamp() + time_to_next_change;
-
-    try setSystemdTimer(allocator, next_change_ts, args);
 
     // TODO calculations of sunrise and sunset
     const sunrise = 5 * 3600;
@@ -195,5 +195,10 @@ pub fn main() !void {
 
     if (config.kitty) |kitty| {
         try kitty.setTheme(allocator, color_scheme);
+    }
+
+    if (config.wallpaper) |wallpaper| {
+        const time_to_next_change = try wallpaper.updateWallpaper(allocator, seconds_since_midnight);
+        try setSystemdTimer(allocator, now.timestamp() + time_to_next_change, args);
     }
 }
