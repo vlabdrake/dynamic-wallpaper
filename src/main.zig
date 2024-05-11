@@ -7,20 +7,20 @@ const ColorScheme = enum { Light, Dark };
 const Config = struct {
     symlink: []u8,
     wallpapers: [][]u8,
-    gtk: GTK,
+    gtk: ?Gtk,
     kitty: ?Kitty,
 };
 
-const GTK = struct {
+const Gtk = struct {
     light_theme: []u8,
     dark_theme: []u8,
 
-    fn setTheme(self: *const GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    fn setTheme(self: *const Gtk, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
         try self.setGtkTheme(allocator, scheme);
         try self.setColorScheme(allocator, scheme);
     }
 
-    fn setGtkTheme(self: *const GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    fn setGtkTheme(self: *const Gtk, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
         const theme = switch (scheme) {
             ColorScheme.Light => self.light_theme,
             ColorScheme.Dark => self.dark_theme,
@@ -29,7 +29,7 @@ const GTK = struct {
         try runCommand(allocator, &argv);
     }
 
-    fn setColorScheme(_: *const GTK, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+    fn setColorScheme(_: *const Gtk, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
         const scheme_str = switch (scheme) {
             ColorScheme.Light => "prefer-light",
             ColorScheme.Dark => "prefer-dark",
@@ -186,8 +186,13 @@ pub fn main() !void {
         sunrise...sunset => ColorScheme.Light,
         else => ColorScheme.Dark,
     };
-    try config.gtk.setTheme(allocator, color_scheme);
+
     try setZedThemeMode(allocator, color_scheme);
+
+    if (config.gtk) |gtk| {
+        try gtk.setTheme(allocator, color_scheme);
+    }
+
     if (config.kitty) |kitty| {
         try kitty.setTheme(allocator, color_scheme);
     }
