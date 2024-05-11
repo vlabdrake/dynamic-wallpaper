@@ -109,6 +109,23 @@ fn setZedThemeMode(allocator: std.mem.Allocator, scheme: ColorScheme) !void {
     }
 }
 
+fn setSystemdTimer(allocator: std.mem.Allocator, timestamp: i64, cmd: []const []const u8) !void {
+    var buf: [16]u8 = undefined;
+    const ts = try std.fmt.bufPrint(&buf, "@{}", .{timestamp});
+
+    var set_timer_command = std.ArrayList([]const u8).init(allocator);
+    defer set_timer_command.deinit();
+    try set_timer_command.appendSlice(&[_][]const u8{
+        "systemd-run",
+        "--user",
+        "--on-calendar",
+        ts,
+        "--timer-property=AccuracySec=1us",
+    });
+    try set_timer_command.appendSlice(cmd);
+    try runCommand(allocator, set_timer_command.items);
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -140,22 +157,7 @@ pub fn main() !void {
     const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
     const next_change_ts = now.timestamp() + time_to_next_change;
 
-    var buf: [16]u8 = undefined;
-    const ts = try std.fmt.bufPrint(&buf, "@{}", .{next_change_ts});
-
-    var set_timer_command = std.ArrayList([]const u8).init(allocator);
-    defer set_timer_command.deinit();
-    try set_timer_command.appendSlice(&[_][]const u8{
-        "systemd-run",
-        "--user",
-        "--on-calendar",
-        ts,
-        "--timer-property=AccuracySec=1us",
-    });
-    for (args) |arg| {
-        try set_timer_command.append(arg);
-    }
-    try runCommand(allocator, set_timer_command.items);
+    try setSystemdTimer(allocator, next_change_ts, args);
 
     // TODO calculations of sunrise and sunset
     const sunrise = 5 * 3600;
