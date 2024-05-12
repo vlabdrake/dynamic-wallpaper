@@ -6,6 +6,10 @@
 - switches wallpapers from configured list during the day
 - creates symlink to current wallpaper (useful with screenlock utilities, e.g. hyprlock)
 - switch gtk theme at morning and evening
+- switch app themes:
+  - zed editor
+  - helix editor
+  - kitty terminal
 - uses systemd timer
 
 ## usage

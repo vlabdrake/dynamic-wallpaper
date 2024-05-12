@@ -5,9 +5,10 @@ const c = @cImport(@cInclude("stdlib.h"));
 const ColorScheme = enum { Light, Dark };
 
 const Config = struct {
-    wallpaper: ?Wallpaper,
-    gtk: ?Gtk,
-    kitty: ?Kitty,
+    wallpaper: ?Wallpaper = null,
+    gtk: ?Gtk = null,
+    kitty: ?Kitty = null,
+    helix: ?Helix = null,
 };
 
 const Wallpaper = struct {
@@ -50,6 +51,71 @@ const Gtk = struct {
         };
         const argv = [_][]const u8{ "gsettings", "set", "org.gnome.desktop.interface", "color-scheme", scheme_str };
         try runCommand(allocator, &argv);
+    }
+};
+
+const Kitty = struct {
+    light_theme: []const u8,
+    dark_theme: []const u8,
+
+    fn setTheme(self: *const Kitty, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+        const home_dir = std.mem.span(c.getenv("HOME"));
+        const kitty_dir = try std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".config/kitty" });
+        const theme_config = "theme.conf";
+        const dir = try std.fs.cwd().openDir(kitty_dir, .{});
+        dir.deleteFile(theme_config) catch {};
+        const theme = switch (scheme) {
+            ColorScheme.Dark => self.dark_theme,
+            ColorScheme.Light => self.light_theme,
+        };
+        try dir.symLink(theme, theme_config, .{});
+        try runCommand(allocator, &[_][]const u8{ "killall", "-SIGUSR1", "kitty" });
+    }
+};
+
+const Helix = struct {
+    light_theme: []const u8,
+    dark_theme: []const u8,
+
+    fn setTheme(self: *const Helix, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
+        const home_dir = std.mem.span(c.getenv("HOME"));
+        const path = try std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".config/helix/config.toml" });
+        defer allocator.free(path);
+
+        const data = try readFile(allocator, path);
+        defer allocator.free(data);
+
+        const theme_prefix = "theme = \"";
+        const theme_position = std.mem.indexOf(u8, data, theme_prefix);
+
+        var current_theme: ?[]const u8 = null;
+        if (theme_position) |tp| {
+            const theme_name_start = tp + theme_prefix.len;
+            const theme_name_end = std.mem.indexOf(u8, data[theme_name_start..], "\"").?;
+            current_theme = data[theme_name_start..theme_name_end];
+        }
+
+        const theme = switch (scheme) {
+            ColorScheme.Light => self.light_theme,
+            ColorScheme.Dark => self.dark_theme,
+        };
+
+        if (current_theme) |ct| {
+            if (!std.mem.eql(u8, ct, theme)) {
+                const new_data = try replaceAlloc(allocator, data, ct, theme);
+                defer allocator.free(new_data);
+                try writeFile(path, new_data);
+            }
+        } else {
+            const f = try std.fs.cwd().openFile(path, .{ .mode = .write_only });
+            try f.writeAll("theme = \"");
+            try f.writeAll(theme);
+            try f.writeAll("\"\n");
+            try f.writeAll(data);
+            f.close();
+        }
+
+        try runCommand(allocator, &[_][]const u8{ "killall", "-SIGUSR1", "helix" });
     }
 };
 
@@ -124,25 +190,6 @@ fn setZedThemeMode(allocator: std.mem.Allocator, scheme: ColorScheme) !void {
     }
 }
 
-const Kitty = struct {
-    light_theme: []const u8,
-    dark_theme: []const u8,
-
-    fn setTheme(self: *const Kitty, allocator: std.mem.Allocator, scheme: ColorScheme) !void {
-        const home_dir = std.mem.span(c.getenv("HOME"));
-        const kitty_dir = try std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".config/kitty" });
-        const theme_config = "theme.conf";
-        const dir = try std.fs.cwd().openDir(kitty_dir, .{});
-        dir.deleteFile(theme_config) catch {};
-        const theme = switch (scheme) {
-            ColorScheme.Dark => self.dark_theme,
-            ColorScheme.Light => self.light_theme,
-        };
-        try dir.symLink(theme, theme_config, .{});
-        try runCommand(allocator, &[_][]const u8{ "killall", "-SIGUSR1", "kitty" });
-    }
-};
-
 fn setSystemdTimer(allocator: std.mem.Allocator, timestamp: i64, cmd: []const []const u8) !void {
     var buf: [16]u8 = undefined;
     const ts = try std.fmt.bufPrint(&buf, "@{}", .{timestamp});
@@ -195,6 +242,10 @@ pub fn main() !void {
 
     if (config.kitty) |kitty| {
         try kitty.setTheme(allocator, color_scheme);
+    }
+
+    if (config.helix) |helix| {
+        try helix.setTheme(allocator, color_scheme);
     }
 
     if (config.wallpaper) |wallpaper| {
