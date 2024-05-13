@@ -15,14 +15,15 @@ const Wallpaper = struct {
     symlink: []u8,
     wallpapers: [][]u8,
 
-    fn updateWallpaper(self: *const Wallpaper, allocator: std.mem.Allocator, seconds_since_midnight: u64) !i64 {
+    fn getExpectedWallpaper(self: *const Wallpaper, seconds_since_midnight: u64) usize {
         const wallpaper_update_interval = 86400 / self.wallpapers.len;
-        const current_wallpaper = seconds_since_midnight / wallpaper_update_interval;
+        return seconds_since_midnight / wallpaper_update_interval;
+    }
+
+    fn updateWallpaper(self: *const Wallpaper, allocator: std.mem.Allocator, wallpaper: usize) !void {
         std.fs.cwd().deleteFile(self.symlink) catch {};
-        try std.fs.cwd().symLink(self.wallpapers[current_wallpaper], self.symlink, .{});
+        try std.fs.cwd().symLink(self.wallpapers[wallpaper], self.symlink, .{});
         try setBackground(allocator, self.symlink);
-        const time_to_next_change: i64 = @intCast(wallpaper_update_interval - seconds_since_midnight % wallpaper_update_interval);
-        return time_to_next_change;
     }
 };
 
@@ -190,21 +191,16 @@ fn setZedThemeMode(allocator: std.mem.Allocator, scheme: ColorScheme) !void {
     }
 }
 
-fn setSystemdTimer(allocator: std.mem.Allocator, timestamp: i64, cmd: []const []const u8) !void {
-    var buf: [16]u8 = undefined;
-    const ts = try std.fmt.bufPrint(&buf, "@{}", .{timestamp});
-
-    var set_timer_command = std.ArrayList([]const u8).init(allocator);
-    defer set_timer_command.deinit();
-    try set_timer_command.appendSlice(&[_][]const u8{
-        "systemd-run",
-        "--user",
-        "--on-calendar",
-        ts,
-        "--timer-property=AccuracySec=1us",
-    });
-    try set_timer_command.appendSlice(cmd);
-    try runCommand(allocator, set_timer_command.items);
+fn getColorScheme(d: dt.DateTime) ColorScheme {
+    // TODO calculations of sunrise and sunset
+    const seconds_since_midnight = d.timestamp() - d.replace(.{ .hour = 0, .minute = 0, .second = 0 }).timestamp();
+    const sunrise = 5 * 3600;
+    const sunset = 19 * 3600;
+    const color_scheme = switch (seconds_since_midnight) {
+        sunrise...sunset => ColorScheme.Light,
+        else => ColorScheme.Dark,
+    };
+    return color_scheme;
 }
 
 pub fn main() !void {
@@ -221,35 +217,41 @@ pub fn main() !void {
 
     const config = parsed.value;
 
-    const now = dt.DateTime.now();
-    const midnight = now.replace(.{ .hour = 0, .minute = 0, .second = 0 });
+    const midnight = dt.DateTime.now().replace(.{ .hour = 0, .minute = 0, .second = 0 });
 
-    const seconds_since_midnight: usize = @intCast(now.timestamp() - midnight.timestamp());
+    var current_wallpaper: ?usize = null;
+    var current_color_scheme: ?ColorScheme = null;
 
-    // TODO calculations of sunrise and sunset
-    const sunrise = 5 * 3600;
-    const sunset = 19 * 3600;
-    const color_scheme = switch (seconds_since_midnight) {
-        sunrise...sunset => ColorScheme.Light,
-        else => ColorScheme.Dark,
-    };
+    while (true) {
+        const now = dt.DateTime.now();
+        const seconds_since_midnight: usize = @as(usize, @intCast(now.timestamp() - midnight.timestamp())) % 86400;
 
-    try setZedThemeMode(allocator, color_scheme);
+        const color_scheme = getColorScheme(now);
+        if (color_scheme != current_color_scheme) {
+            current_color_scheme = color_scheme;
 
-    if (config.gtk) |gtk| {
-        try gtk.setTheme(allocator, color_scheme);
-    }
+            try setZedThemeMode(allocator, color_scheme);
 
-    if (config.kitty) |kitty| {
-        try kitty.setTheme(allocator, color_scheme);
-    }
+            if (config.gtk) |gtk| {
+                try gtk.setTheme(allocator, color_scheme);
+            }
 
-    if (config.helix) |helix| {
-        try helix.setTheme(allocator, color_scheme);
-    }
+            if (config.kitty) |kitty| {
+                try kitty.setTheme(allocator, color_scheme);
+            }
 
-    if (config.wallpaper) |wallpaper| {
-        const time_to_next_change = try wallpaper.updateWallpaper(allocator, seconds_since_midnight);
-        try setSystemdTimer(allocator, now.timestamp() + time_to_next_change, args);
+            if (config.helix) |helix| {
+                try helix.setTheme(allocator, color_scheme);
+            }
+        }
+        if (config.wallpaper) |wallpaper| {
+            const expected_wallpaper = wallpaper.getExpectedWallpaper(seconds_since_midnight);
+            if (expected_wallpaper != current_wallpaper) {
+                current_wallpaper = expected_wallpaper;
+                try wallpaper.updateWallpaper(allocator, expected_wallpaper);
+            }
+        }
+
+        std.time.sleep(1 * std.time.ns_per_s);
     }
 }

@@ -10,7 +10,6 @@
   - zed editor
   - helix editor
   - kitty terminal
-- uses systemd timer
 
 ## usage
 
