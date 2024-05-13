@@ -92,7 +92,7 @@ const Helix = struct {
         var current_theme: ?[]const u8 = null;
         if (theme_position) |tp| {
             const theme_name_start = tp + theme_prefix.len;
-            const theme_name_end = std.mem.indexOf(u8, data[theme_name_start..], "\"").?;
+            const theme_name_end = theme_name_start + std.mem.indexOf(u8, data[theme_name_start..], "\"").?;
             current_theme = data[theme_name_start..theme_name_end];
         }
 
