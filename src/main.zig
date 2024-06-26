@@ -12,7 +12,6 @@ const Config = struct {
 };
 
 const Wallpaper = struct {
-    symlink: []u8,
     wallpapers: [][]u8,
 
     fn getExpectedWallpaper(self: *const Wallpaper, seconds_since_midnight: u64) usize {
@@ -21,9 +20,14 @@ const Wallpaper = struct {
     }
 
     fn updateWallpaper(self: *const Wallpaper, allocator: std.mem.Allocator, wallpaper: usize) !void {
-        std.fs.cwd().deleteFile(self.symlink) catch {};
-        try std.fs.cwd().symLink(self.wallpapers[wallpaper], self.symlink, .{});
-        try setBackground(allocator, self.symlink);
+        const runtime_dir = std.mem.span(c.getenv("XDG_RUNTIME_DIR"));
+        const wallpaper_path_filename = try std.fs.path.join(allocator, &[_][]const u8{ runtime_dir, "dynamic_wallpaper" });
+
+        const wallpaper_path = try std.fs.createFileAbsolute(wallpaper_path_filename, .{ .truncate = true });
+        defer wallpaper_path.close();
+
+        _ = try wallpaper_path.writeAll(self.wallpapers[wallpaper]);
+        try setBackground(allocator, self.wallpapers[wallpaper]);
     }
 };
 
